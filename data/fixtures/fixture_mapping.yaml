@@ -1,0 +1,57 @@
+# Mapping for the committed synthetic fixture. Used by the test suite.
+dataset:
+  name: insightdesk-fixture
+  source_url: synthetic — authored for this repository
+  download_date: "2026-07-27"
+  license_status: owned
+
+columns:
+  ticket_id: Ticket ID
+  # `Date of Purchase` exists in the fixture and is deliberately NOT mapped here.
+  created_at: Ticket Created At
+  # `Time to Resolution` holds a resolution TIMESTAMP in this fixture, not a duration.
+  resolved_at: Time to Resolution
+  customer_segment: null
+  product_area: Product Purchased
+  issue_type: Ticket Type
+  priority: Ticket Priority
+  status: Ticket Status
+  channel: Ticket Channel
+  platform: null
+  region: null
+  sla_plan: null
+  sla_deadline: null
+  issue_subject: Ticket Subject
+  issue_description: Ticket Description
+  resolution_notes: Resolution
+  first_response_at: First Response Time
+  csat_score: Customer Satisfaction Rating
+  escalated: Escalated
+
+privacy:
+  customer_id_column: Customer Email
+
+normalization:
+  nulls: ["", "na", "n/a", "null", "none", "nan", "-", "--"]
+  timestamps:
+    format: null
+    forbidden_created_at_columns: ["Date of Purchase"]
+  status:
+    resolved: ["Closed", "Resolved"]
+    open: ["Open"]
+    pending: ["Pending Customer Response"]
+  booleans:
+    true_values: ["yes", "true", "1", "y"]
+    false_values: ["no", "false", "0", "n"]
+  csat:
+    scale_min: 1
+    scale_max: 5
+    zero_means_no_response: true
+  resolved_definition:
+    statuses: ["resolved"]
+
+derivations:
+  # `Time to Resolution` exists as a timestamp in this fixture, not a duration,
+  # so resolution_time_hours is derived from timestamps instead.
+  resolution_time_hours: from_timestamps
+  response_time_hours: from_timestamps

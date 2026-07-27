@@ -1,0 +1,58 @@
+# Data — never commit the dataset
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+# fixtures ARE committed (tiny synthetic)
+!data/fixtures/
+!data/fixtures/**
+
+# Evaluation — the *template* is committed, graded sets are not.
+# A real graded set references ticket ids from a dataset that never enters git.
+data/evaluation/*
+!data/evaluation/.gitkeep
+!data/evaluation/README.md
+!data/evaluation/*.template.jsonl
+
+# Artifacts — indexes, models, embeddings, audits
+artifacts/*
+!artifacts/.gitkeep
+
+# Belt and braces: these must never be committed regardless of directory.
+# The CI guard job fails the build if one slips through anyway.
+*.faiss
+*.joblib
+*.parquet
+*.npz
+*.pkl
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

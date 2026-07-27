@@ -1,0 +1,28 @@
+# Phase 1-3 core
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+SQLAlchemy==2.0.36
+pandas==2.2.3
+numpy==2.1.3
+pyarrow==18.1.0
+PyYAML==6.0.2
+datasketch==1.6.5
+
+# Phase 4+ retrieval
+sentence-transformers==3.3.1
+faiss-cpu==1.9.0.post1
+rank-bm25==0.2.2
+
+# Phase 7-8 clustering / risk
+scikit-learn==1.6.0
+joblib==1.4.2
+vaderSentiment==3.3.2
+
+# Optional LLM provider
+anthropic==0.42.0
+
+# Dev
+pytest==8.3.4
+httpx==0.28.1

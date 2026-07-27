@@ -1,0 +1,9 @@
+// TEMPLATE ONLY. Copy to retrieval_queries.jsonl and replace every ticket id
+// with real ids from YOUR corpus. The ids below are from the committed
+// synthetic fixture and mean nothing against another dataset.
+//
+// Lines starting with // are ignored by the loader. Grades: 2 = resolves it,
+// 1 = related context, 0 = judged and not relevant. Absent = never judged.
+{"query_id": "Q001", "text": "Customer was charged twice for the same invoice and wants the duplicate refunded", "product_area": "Payments", "issue_type": null, "relevance": {"T0002": 2, "T0001": 1}, "notes": "T0001 is a duplicate authorization hold rather than a true double charge - related, not the answer"}
+{"query_id": "Q002", "text": "One-time passcode never arrives by SMS when signing in", "product_area": "Auth", "issue_type": null, "relevance": {"T0003": 2}, "notes": "carrier filtering case"}
+{"query_id": "Q003", "text": "How do I export my data to a spreadsheet on a schedule", "product_area": null, "issue_type": null, "relevance": {}, "notes": "deliberate no-answer query: nothing in the corpus covers scheduled export. Tests abstention, not retrieval."}

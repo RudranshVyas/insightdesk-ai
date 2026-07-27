@@ -1,0 +1,41 @@
+{
+  "name": "resolution",
+  "version": "v1",
+  "created": "2026-07-28",
+  "purpose": "Compose a cited resolution suggestion from retrieved historical cases.",
+  "output_schema": "backend.app.schemas.brief.GeneratedResolution",
+  "files": {
+    "system": "v1_system.txt",
+    "user": "v1_user.txt"
+  },
+  "user_template_variables": [
+    "query",
+    "product_area",
+    "issue_type",
+    "evidence",
+    "evidence_count"
+  ],
+  "generation_settings": {
+    "max_output_tokens": 8000,
+    "response_format": "json_schema",
+    "note": [
+      "No temperature/top_p/top_k: these are removed on Claude Opus 5 and return a 400.",
+      "Thinking is on by default on Opus 5, and max_output_tokens caps thinking AND",
+      "response text together. 8000 leaves room for both; a tight budget truncates",
+      "the JSON mid-object and forces the deterministic fallback for no reason."
+    ]
+  },
+  "invariants": [
+    "No confidence, probability, score, or percentage field is requested or accepted.",
+    "Evidence is fenced and explicitly labeled untrusted data.",
+    "Every step must cite at least one evidence ticket id.",
+    "Abstention via insufficient_evidence is an explicitly valued outcome."
+  ],
+  "changelog": [
+    {
+      "version": "v1",
+      "date": "2026-07-28",
+      "note": "Initial version. Any wording change that could alter output requires a new version directory, not an edit here."
+    }
+  ]
+}

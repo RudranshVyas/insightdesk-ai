@@ -1,0 +1,82 @@
+# Reviewed mapping for data/raw/customer_support_tickets_200k.csv
+#
+# Corrections made to the auto-suggested guess, each with a reason:
+#   sla_plan          was `sla_breached`  -> null. sla_breached is an OUTCOME,
+#                     not a plan tier. Mapping it to sla_plan would have fed a
+#                     post-outcome field into the T0 risk feature list.
+#   sla_breached      was null            -> sla_breached (the real column).
+#   response_time_hours   was null        -> first_response_time_hours.
+#   resolution_time_hours was null        -> resolution_time_hours (already a
+#                     duration in this dataset, so NOT derived from timestamps).
+#   platform          was null            -> operating_system.
+#
+# Deliberately left null:
+#   issue_subject     no subject column exists; issue_text = issue_description.
+#   sla_deadline      no deadline column exists.
+#   reopened          no reopen column exists.
+#   sla_plan          `subscription_type` (Free/Premium/...) is a billing tier,
+#                     not a contracted SLA. Calling it sla_plan would be a claim
+#                     the data does not support.
+#
+# created_at: `ticket_created_date` is a genuine ticket creation date. It is
+# DATE-ONLY (no time component), so hour-of-day features are unavailable and
+# same-day durations round to zero.
+
+dataset:
+  name: customer_support_tickets_200k
+  source_url: Kaggle — customer support ticket dataset (exact URL unconfirmed)
+  download_date: "2026-07-28"
+  license_status: unverified
+
+columns:
+  ticket_id: ticket_id
+  created_at: ticket_created_date
+  resolved_at: ticket_resolved_date
+  first_response_at: null
+  sla_deadline: null
+  customer_segment: customer_segment
+  product_area: product
+  issue_type: category
+  priority: priority
+  status: status
+  channel: channel
+  platform: operating_system
+  region: region
+  sla_plan: null
+  issue_subject: null
+  issue_description: issue_description
+  resolution_notes: resolution_notes
+  response_time_hours: first_response_time_hours
+  resolution_time_hours: resolution_time_hours
+  reopened: null
+  escalated: escalated
+  sla_breached: sla_breached
+  csat_score: customer_satisfaction_score
+
+privacy:
+  customer_id_column: customer_email
+
+normalization:
+  nulls: ["", "na", "n/a", "null", "none", "nan", "-", "--"]
+  timestamps:
+    format: null
+    forbidden_created_at_columns: []
+  status:
+    resolved: ["Closed", "Resolved"]
+    open: ["Open"]
+    pending: ["Pending", "In Progress", "Escalated"]
+  booleans:
+    true_values: ["yes", "true", "1", "y"]
+    false_values: ["no", "false", "0", "n"]
+  csat:
+    scale_min: 1
+    scale_max: 5
+    # No 0 values appear in this column, so nothing is reinterpreted.
+    zero_means_no_response: false
+  resolved_definition:
+    statuses: ["resolved"]
+
+# resolution_time_hours and response_time_hours arrive as real numeric columns,
+# so no timestamp derivation is requested. Deriving them would silently override
+# the dataset's own values with a date-only subtraction.
+derivations: {}

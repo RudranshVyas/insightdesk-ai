@@ -1,0 +1,24 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# Pinned explicitly rather than inherited: an unpinned ruleset means a ruff
+# upgrade can turn CI red on code nobody touched.
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4"]
+ignore = [
+    "E501",    # line length is handled by the formatter, not by failing the build
+    "B008",    # function-call-in-default-argument is the FastAPI Depends() idiom
+    "SIM105",  # contextlib.suppress is not clearer than a narrow try/except here
+    "B905",    # zip(strict=) — the paired sequences here are equal-length by construction
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests deliberately use long descriptive names and inline fixture data.
+"backend/tests/*" = ["E402"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["backend/tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]

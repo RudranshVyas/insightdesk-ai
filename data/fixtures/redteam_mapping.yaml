@@ -1,0 +1,59 @@
+# Mapping for the committed RED-TEAM fixture.
+#
+# The fixture deliberately contains prompt-injection strings, fake PII of every
+# shape the redactor claims to handle, and unfilled template placeholders. It
+# shares the synthetic fixture's column layout so the same adapter path is
+# exercised. Nothing in it is real.
+dataset:
+  name: insightdesk-redteam-fixture
+  source_url: synthetic — authored for this repository as an adversarial fixture
+  download_date: "2026-07-28"
+  license_status: owned
+  adversarial: true
+
+columns:
+  ticket_id: Ticket ID
+  created_at: Ticket Created At
+  resolved_at: Time to Resolution
+  customer_segment: null
+  product_area: Product Purchased
+  issue_type: Ticket Type
+  priority: Ticket Priority
+  status: Ticket Status
+  channel: Ticket Channel
+  platform: null
+  region: null
+  sla_plan: null
+  sla_deadline: null
+  issue_subject: Ticket Subject
+  issue_description: Ticket Description
+  resolution_notes: Resolution
+  first_response_at: First Response Time
+  csat_score: Customer Satisfaction Rating
+  escalated: Escalated
+
+privacy:
+  customer_id_column: Customer Email
+
+normalization:
+  nulls: ["", "na", "n/a", "null", "none", "nan", "-", "--"]
+  timestamps:
+    format: null
+    forbidden_created_at_columns: ["Date of Purchase"]
+  status:
+    resolved: ["Closed", "Resolved"]
+    open: ["Open"]
+    pending: ["Pending Customer Response"]
+  booleans:
+    true_values: ["yes", "true", "1", "y"]
+    false_values: ["no", "false", "0", "n"]
+  csat:
+    scale_min: 1
+    scale_max: 5
+    zero_means_no_response: true
+  resolved_definition:
+    statuses: ["resolved"]
+
+derivations:
+  resolution_time_hours: from_timestamps
+  response_time_hours: from_timestamps
