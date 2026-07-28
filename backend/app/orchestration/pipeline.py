@@ -27,6 +27,7 @@ from backend.app.core.prompt_registry import Prompt, load_prompt
 from backend.app.core.versions import version_stamp
 from backend.app.orchestration import verifier as V
 from backend.app.schemas.brief import (
+    EvidenceSummary,
     EvidenceTicket,
     GeneratedResolution,
     RetrievalStrength,
@@ -71,6 +72,7 @@ class PipelineState:
     provider_calls: int = 0
     prompt: Prompt | None = None
     provider_usage: dict[str, Any] = field(default_factory=dict)
+    summary: EvidenceSummary | None = None
     # Set when instruction-like text is found in the query or in retrieved
     # evidence. Detection happens at intake and curation, which are upstream of
     # the verifier, so without carrying it forward the brief would be warned
@@ -392,6 +394,72 @@ def suggest_llm(
     raise LLM.LLMError(f"generation failed after 2 attempts: {last_error}")
 
 
+# --- optional stage: summarise the evidence -----------------------------------
+
+
+def summarise_evidence(
+    state: PipelineState, provider: LLM.LLMProvider, settings: Settings
+) -> EvidenceSummary:
+    """State what the matched tickets have in common. Not a fix.
+
+    Deliberately gated on retrieval alone, not on the resolution-note action
+    rate. Summarising correspondence is fully supported even where claiming a
+    resolution is not — "all five report duplicate charges and support asked for
+    the invoice number in each" is true of the evidence and useful to an analyst.
+    Producing a fix from that same evidence would not be.
+    """
+    prompt = load_prompt("summary", "v1")
+    gen = prompt.generation_settings()
+    max_tokens = int(gen.get("max_output_tokens") or 2000)
+
+    user = prompt.render_user(
+        query=G.neutralize_delimiters(state.query_text),
+        evidence=render_evidence_block(state.evidence),
+        evidence_count=len(state.evidence),
+    )
+
+    state.provider_calls += 1
+    response = provider.complete_json(
+        prompt.system, user, EvidenceSummary.model_json_schema(), max_tokens
+    )
+    state.provider_usage = response.usage()
+    summary = EvidenceSummary.model_validate(LLM.extract_json_object(response.text))
+
+    # The same citation guarantee the resolution path gets: an id the model
+    # invented is dropped, and an action left with none goes with it.
+    valid = {t.ticket_id for t in state.evidence}
+    kept, dropped = [], []
+    for action in summary.support_actions:
+        good = [c for c in action.citation_ticket_ids if str(c) in valid]
+        dropped.extend([c for c in action.citation_ticket_ids if str(c) not in valid])
+        if good:
+            action.citation_ticket_ids = good
+            kept.append(action)
+    summary.support_actions = kept
+    if dropped:
+        state.warnings.append(
+            f"Dropped {len(dropped)} summary citation(s) referring to ticket ids that "
+            f"were not in the evidence set: {sorted(set(dropped))[:5]}"
+        )
+
+    blob = " ".join([summary.pattern] + [a.text for a in summary.support_actions])
+    pii = R.scan_pii(blob)
+    pii.pop("url", None)
+    if pii:
+        summary.pattern = R.redact_text(summary.pattern)
+        for a in summary.support_actions:
+            a.text = R.redact_text(a.text)
+        state.warnings.append(f"Redacted PII from the summary: {sorted(pii)}")
+
+    over = G.scan_overclaiming(blob)
+    if over.flagged:
+        state.warnings.append(
+            f"The summary used certainty language ({', '.join(over.labels)}). Past "
+            f"tickets cannot guarantee an outcome."
+        )
+    return summary
+
+
 # --- stage 7: compose ---------------------------------------------------------
 
 
@@ -431,6 +499,7 @@ def compose_brief(state: PipelineState, settings: Settings) -> SupportBrief:
         similar_cases=state.evidence,
         suggested_steps=v.steps if v else [],
         relevance_explanation=(v.relevance_explanation if v else None) or None,
+        summary=state.summary,
         risk_signal=None,  # capability-gated; null rather than a fabricated zero
         # Injection detected anywhere upstream escalates the whole brief, not
         # just the stage that found it. Warning an analyst while leaving the
@@ -525,6 +594,32 @@ def run_pipeline(
         state.warnings.extend(ctx.warnings)
 
     state.generated = generated
+
+    # --- optional: summarise ---------------------------------------------------
+    # `generation_allowed` gates this too, and that is not incidental. Weak
+    # retrieval means ZERO provider calls — summarising unrelated tickets is
+    # still a provider call, still costs money, and still puts model output in
+    # front of an analyst on evidence the gate already judged too weak to use.
+    # The guardrail suite caught this exact omission on the first run.
+    if (
+        generation_allowed
+        and provider.enabled
+        and state.evidence
+        and request.force_mode != "deterministic"
+    ):
+        with _stage(state, "summarise") as ctx:
+            try:
+                state.summary = summarise_evidence(state, provider, s)
+                ctx.summary = (
+                    f"{len(state.summary.support_actions)} action(s) across "
+                    f"{len(state.evidence)} tickets; "
+                    f"resolution_recorded={state.summary.resolution_recorded}"
+                )
+            except LLM.LLMError as exc:
+                ctx.status = "degraded"
+                ctx.summary = "summary unavailable"
+                ctx.warnings.append(f"Could not summarise the tickets: {exc}")
+            state.warnings.extend(ctx.warnings)
 
     # --- stage 6: verify ------------------------------------------------------
     state.transition("VERIFYING")

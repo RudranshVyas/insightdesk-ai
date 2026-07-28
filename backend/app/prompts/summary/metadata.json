@@ -1,0 +1,20 @@
+{
+  "name": "summary",
+  "version": "v1",
+  "created": "2026-07-28",
+  "purpose": "Summarise what a set of matched tickets have in common and what support actually did, without claiming a fix the evidence does not contain.",
+  "output_schema": "backend.app.schemas.brief.EvidenceSummary",
+  "files": { "system": "v1_system.txt", "user": "v1_user.txt" },
+  "user_template_variables": ["query", "evidence", "evidence_count"],
+  "generation_settings": { "max_output_tokens": 2000, "response_format": "json_object" },
+  "invariants": [
+    "No confidence, probability, or score field is requested or accepted.",
+    "Evidence is fenced and labelled untrusted data.",
+    "Every support_action must cite at least one evidence ticket id.",
+    "resolution_recorded is false unless a ticket states a completed action — the model may not upgrade a request for information into a fix.",
+    "Written for corpora where the resolution column is first-contact correspondence; the prompt names that case explicitly."
+  ],
+  "changelog": [
+    { "version": "v1", "date": "2026-07-28", "note": "Initial version. Any wording change that could alter output requires a new version directory, not an edit here." }
+  ]
+}

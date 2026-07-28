@@ -21,6 +21,23 @@ from typing import Any, Protocol
 
 from backend.app.core.config import Settings, get_settings
 
+# Providers that speak the OpenAI chat-completions shape. All run permanent free
+# tiers, which is what makes an LLM path viable on no budget.
+OPENAI_COMPATIBLE: frozenset[str] = frozenset(
+    {"openai_compatible", "groq", "gemini", "cerebras", "openrouter", "together", "mistral"}
+)
+
+# Sensible base URLs so a user only has to set provider + key. Overridable via
+# LLM_BASE_URL; never treated as authoritative, since vendors move endpoints.
+DEFAULT_BASE_URLS: dict[str, str] = {
+    "groq": "https://api.groq.com/openai/v1",
+    "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "cerebras": "https://api.cerebras.ai/v1",
+    "openrouter": "https://openrouter.ai/api/v1",
+    "together": "https://api.together.xyz/v1",
+    "mistral": "https://api.mistral.ai/v1",
+}
+
 
 class LLMError(Exception):
     """Any provider failure. Callers fall back to deterministic mode."""
@@ -172,6 +189,101 @@ class AnthropicProvider:
         )
 
 
+class OpenAICompatibleProvider:
+    """Any provider speaking the OpenAI chat-completions shape.
+
+    One class covers Groq, Google Gemini (its OpenAI-compatible endpoint),
+    Cerebras, OpenRouter, Together, and Mistral. All of them run permanent free
+    tiers, which is what makes an LLM path realistic for a project with no
+    budget. The differences that matter are a base URL and a model name, so both
+    are configuration rather than code.
+
+    Deliberately not doing: hard-coding any provider's free-tier rate limits as
+    fact. Those change, and a number baked into source becomes a lie on a
+    schedule. Failures surface as `LLMError` and the pipeline falls back.
+    """
+
+    name = "openai_compatible"
+    enabled = True
+
+    def __init__(self, settings: Settings | None = None) -> None:
+        import httpx
+
+        self.settings = settings or get_settings()
+        if not self.settings.llm_api_key:
+            raise LLMError("LLM_PROVIDER is set but no API key is configured")
+
+        provider = (self.settings.llm_provider or "").strip().lower()
+        base_url = self.settings.llm_base_url or DEFAULT_BASE_URLS.get(provider)
+        if not base_url:
+            raise LLMError(
+                f"no base URL for provider {provider!r}. Set LLM_BASE_URL, or use one "
+                f"of {sorted(DEFAULT_BASE_URLS)}."
+            )
+
+        self._httpx = httpx
+        self.model = self.settings.llm_model
+        self.client = httpx.Client(
+            base_url=base_url.rstrip("/"),
+            timeout=float(self.settings.llm_timeout_seconds),
+            headers={"Authorization": f"Bearer {self.settings.llm_api_key}"},
+        )
+
+    def complete_json(
+        self, system: str, user: str, schema: dict[str, Any], max_tokens: int
+    ) -> LLMResponse:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            # Widely supported; providers that ignore it still tend to return an
+            # object because the prompt demands one, and extract_json_object
+            # tolerates a stray fence either way.
+            "response_format": {"type": "json_object"},
+        }
+
+        t0 = time.perf_counter()
+        try:
+            res = self.client.post("/chat/completions", json=payload)
+        except self._httpx.TimeoutException as exc:
+            raise LLMTimeout(
+                f"provider timed out after {self.settings.llm_timeout_seconds}s"
+            ) from exc
+        except self._httpx.HTTPError as exc:
+            raise LLMError(f"could not reach the provider: {exc}") from exc
+
+        latency_ms = (time.perf_counter() - t0) * 1000.0
+
+        if res.status_code == 429:
+            raise LLMError("provider rate limited the request (free tier quota)")
+        if res.status_code >= 400:
+            raise LLMError(f"provider returned {res.status_code}: {res.text[:200]}")
+
+        try:
+            body = res.json()
+            choice = body["choices"][0]
+            text = choice["message"]["content"] or ""
+        except (KeyError, IndexError, ValueError) as exc:
+            raise LLMError(f"unexpected provider response shape: {exc}") from exc
+
+        # A refusal here arrives as a finish_reason rather than a status code.
+        if choice.get("finish_reason") == "content_filter":
+            raise LLMRefusal("content_filter", "provider content filter declined the request")
+
+        usage = body.get("usage") or {}
+        return LLMResponse(
+            text=text,
+            input_tokens=int(usage.get("prompt_tokens") or 0),
+            output_tokens=int(usage.get("completion_tokens") or 0),
+            latency_ms=latency_ms,
+            model=body.get("model", self.model),
+            stop_reason=choice.get("finish_reason"),
+        )
+
+
 # --- factory ------------------------------------------------------------------
 
 
@@ -188,6 +300,11 @@ def build_provider(settings: Settings | None = None) -> LLMProvider:
     if provider == "anthropic":
         try:
             return AnthropicProvider(s)
+        except (LLMError, ImportError):
+            return NullProvider()
+    if provider in OPENAI_COMPATIBLE:
+        try:
+            return OpenAICompatibleProvider(s)
         except (LLMError, ImportError):
             return NullProvider()
     return NullProvider()

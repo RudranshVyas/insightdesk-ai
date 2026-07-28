@@ -182,6 +182,8 @@ function Result({ brief }: { brief: SupportBrief }) {
         </Notice>
       )}
 
+      {brief.summary && <SummaryBlock summary={brief.summary} />}
+
       {/* The cases. This is what the analyst actually reads. */}
       {brief.similar_cases.length > 0 ? (
         <section>
@@ -284,6 +286,61 @@ function Result({ brief }: { brief: SupportBrief }) {
         </p>
       </TechnicalDetails>
     </div>
+  );
+}
+
+function SummaryBlock({ summary }: { summary: NonNullable<SupportBrief["summary"]> }) {
+  return (
+    <section className="animate-rise rounded-2xl border border-teal/20 bg-teal-light/40 px-5 py-4">
+      <p className="mb-2 font-mono text-[10.5px] uppercase tracking-[0.12em] text-teal-mid">
+        Across these tickets
+      </p>
+
+      {summary.pattern && (
+        <p className="font-serif text-[17px] leading-[1.6] text-ink">{summary.pattern}</p>
+      )}
+
+      {summary.support_actions.length > 0 && (
+        <ul className="mt-3 space-y-1.5">
+          {summary.support_actions.map((a, i) => (
+            <li key={i} className="flex gap-2 text-[14px] leading-relaxed text-ink-soft">
+              <span className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-teal-mid" />
+              <span>
+                {a.text}{" "}
+                {a.citation_ticket_ids.map((id) => (
+                  <TicketRef key={id} id={id} />
+                ))}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* The single most important line here: whether any ticket actually
+          records a fix, stated rather than left for the reader to assume. */}
+      {!summary.resolution_recorded && (
+        <p className="mt-3 border-t border-teal/15 pt-2.5 text-[13px] leading-relaxed text-ink-mute">
+          None of these tickets records what finally resolved the problem.
+        </p>
+      )}
+
+      {summary.open_questions.length > 0 && (
+        <div className="mt-3 border-t border-teal/15 pt-2.5">
+          <p className="mb-1 text-[12.5px] font-medium text-ink-soft">Still unknown</p>
+          <ul className="space-y-0.5">
+            {summary.open_questions.map((q, i) => (
+              <li key={i} className="text-[13px] leading-relaxed text-ink-mute">
+                {q}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <p className="mt-3 text-[11.5px] text-ink-faint">
+        Written by an AI from the tickets above. Every point cites the ticket it came from.
+      </p>
+    </section>
   );
 }
 

@@ -83,7 +83,12 @@ class FakeRetriever:
 
 
 class CountingProvider:
-    """Records every call so 'zero provider calls' is a measurable claim."""
+    """Records every call so 'zero provider calls' is a measurable claim.
+
+    Two provider stages exist when a provider is reachable: the evidence
+    summariser and the resolution generator. Counts below are therefore per
+    *pipeline run*, not per stage, and the comments say which is which.
+    """
 
     name = "anthropic"
     enabled = True
@@ -201,7 +206,7 @@ def test_mixed_strength_generates_but_forces_review() -> None:
         llm_provider="anthropic",
         llm_api_key="k",
     )
-    assert provider.calls == 1
+    assert provider.calls == 2, "one summarise call, one generate call"
     assert brief.mode == "llm"
     assert brief.manual_review_required is True
 
@@ -326,7 +331,8 @@ def test_malformed_json_retries_once_then_falls_back() -> None:
         llm_provider="anthropic",
         llm_api_key="k",
     )
-    assert provider.calls == 2, "exactly one bounded retry"
+    # summarise (1) + generate attempt (2) + one bounded retry (3).
+    assert provider.calls == 3, "exactly one bounded retry on the generate stage"
     assert brief.mode == "deterministic"
 
 
@@ -334,7 +340,9 @@ def test_refusal_is_not_retried() -> None:
     provider = CountingProvider(error=LLM.LLMRefusal("cyber", "declined"))
     _run(FakeRetriever([_hit("T1")]), provider=provider,
          llm_provider="anthropic", llm_api_key="k")
-    assert provider.calls == 1, "a refusal will not become a success on retry"
+    # One call per stage and no retry within either: a refusal will not become a
+    # success on a second attempt.
+    assert provider.calls == 2, "no stage retried its refusal"
 
 
 def test_json_wrapped_in_a_markdown_fence_is_recovered() -> None:
@@ -346,7 +354,7 @@ def test_json_wrapped_in_a_markdown_fence_is_recovered() -> None:
     brief = _run(FakeRetriever([_hit("T1")]), provider=provider,
                  llm_provider="anthropic", llm_api_key="k")
     assert brief.mode == "llm"
-    assert provider.calls == 1
+    assert provider.calls == 2, "one summarise call, one generate call"
 
 
 # --- force_mode ---------------------------------------------------------------

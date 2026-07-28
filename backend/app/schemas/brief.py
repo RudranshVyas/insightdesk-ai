@@ -56,6 +56,25 @@ class GeneratedResolution(BaseModel):
     insufficient_evidence: bool = False
 
 
+class SummaryAction(BaseModel):
+    text: str
+    citation_ticket_ids: list[str] = Field(default_factory=list)
+
+
+class EvidenceSummary(BaseModel):
+    """What the matched tickets have in common — not a fix.
+
+    `resolution_recorded` exists because on many corpora the "resolution" column
+    is first-contact correspondence. The model must state whether any ticket
+    records a completed action rather than letting the reader assume one.
+    """
+
+    pattern: str = ""
+    support_actions: list[SummaryAction] = Field(default_factory=list)
+    open_questions: list[str] = Field(default_factory=list)
+    resolution_recorded: bool = False
+
+
 class EvidenceTicket(BaseModel):
     ticket_id: str
     issue_subject: str | None = None
@@ -129,6 +148,7 @@ class SupportBrief(BaseModel):
     similar_cases: list[EvidenceTicket] = Field(default_factory=list)
     suggested_steps: list[SuggestedStep] = Field(default_factory=list)
     relevance_explanation: str | None = None
+    summary: EvidenceSummary | None = None
     risk_signal: RiskSignal | None = None
     manual_review_required: bool = True
     insufficient_evidence: bool = False

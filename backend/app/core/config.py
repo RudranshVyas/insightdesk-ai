@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     # --- LLM (optional; the app is fully functional with provider "none") ---
     llm_provider: str = "none"
     llm_model: str = "claude-opus-5"
+    # Base URL for an OpenAI-compatible provider. Left blank, a known provider
+    # name (groq, gemini, cerebras, openrouter, together, mistral) supplies its
+    # default; set this to override or to point at anything else.
+    llm_base_url: str | None = None
     llm_api_key: str | None = None
     llm_timeout_seconds: int = 60
     # Caps thinking AND response text together on Opus 5, where thinking is on

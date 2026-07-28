@@ -45,6 +45,19 @@ export interface SuggestedStep {
   citation_ticket_ids: string[];
 }
 
+export interface SummaryAction {
+  text: string;
+  citation_ticket_ids: string[];
+}
+
+export interface EvidenceSummary {
+  pattern: string;
+  support_actions: SummaryAction[];
+  open_questions: string[];
+  /** False unless a ticket states a completed action. Never assume a fix. */
+  resolution_recorded: boolean;
+}
+
 export interface EvidenceTicket {
   ticket_id: string;
   issue_subject: string | null;
@@ -98,6 +111,7 @@ export interface SupportBrief {
   similar_cases: EvidenceTicket[];
   suggested_steps: SuggestedStep[];
   relevance_explanation: string | null;
+  summary: EvidenceSummary | null;
   risk_signal: null;
   manual_review_required: boolean;
   insufficient_evidence: boolean;
