@@ -1,160 +1,150 @@
-// Shared presentational pieces. Each one encodes a rule from the spec, so they
-// live here rather than being re-improvised per page.
-
 import type { ReactNode } from "react";
 import type { Strength } from "../lib/api";
+import { STRENGTH } from "../lib/plain";
 
-export function Card({
-  title,
-  subtitle,
+const TONE = {
+  good: "text-good bg-good-bg border-good/20",
+  caution: "text-caution bg-caution-bg border-caution/20",
+  halt: "text-halt bg-halt-bg border-halt/20",
+} as const;
+
+export function Panel({
   children,
-  right,
+  className = "",
+  as: Tag = "section",
 }: {
-  title?: string;
-  subtitle?: string;
   children: ReactNode;
-  right?: ReactNode;
+  className?: string;
+  as?: "section" | "div" | "article";
 }) {
   return (
-    <section className="rounded-xl border border-line bg-ink-800/60 backdropentity">
-      {(title || right) && (
-        <header className="flex items-start justify-between gap-4 border-b border-line px-5 py-3.5">
-          <div>
-            {title && <h2 className="text-sm font-semibold tracking-wide text-slate-200">{title}</h2>}
-            {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
-          </div>
-          {right}
-        </header>
-      )}
-      <div className="px-5 py-4">{children}</div>
-    </section>
+    <Tag
+      className={`rounded-2xl border border-rule bg-paper-raised shadow-card ${className}`}
+    >
+      {children}
+    </Tag>
+  );
+}
+
+export function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-mute">
+      {children}
+    </h2>
   );
 }
 
 /**
- * Retrieval strength badge.
+ * Match quality, in words.
  *
- * Three values, never a percentage. The tooltip states what it is, because a
- * coloured badge invites the reader to treat it as a confidence score and it is
- * not one.
+ * The number behind it is real and lives one disclosure away. It is not shown
+ * here because a decimal invites reading as a confidence score, which it is not.
  */
-export function StrengthBadge({
-  strength,
-  cosine,
-  calibrated,
+export function MatchBadge({ strength }: { strength: Strength }) {
+  const s = STRENGTH[strength];
+  return (
+    <span
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[13px] font-medium ${TONE[s.tone]}`}
+    >
+      <Dot tone={s.tone} />
+      {s.label}
+    </span>
+  );
+}
+
+function Dot({ tone }: { tone: "good" | "caution" | "halt" }) {
+  const fill = { good: "bg-good", caution: "bg-caution", halt: "bg-halt" }[tone];
+  return <span className={`h-1.5 w-1.5 rounded-full ${fill}`} />;
+}
+
+export function Notice({
+  tone,
+  title,
+  children,
 }: {
-  strength: Strength;
-  cosine?: number | null;
-  calibrated?: boolean;
+  tone: "good" | "caution" | "halt";
+  title: string;
+  children?: ReactNode;
 }) {
-  const styles: Record<Strength, string> = {
-    strong: "bg-emerald-500/10 text-emerald-300 ring-emerald-500/30",
-    mixed: "bg-amber-500/10 text-amber-300 ring-amber-500/30",
-    weak: "bg-rose-500/10 text-rose-300 ring-rose-500/30",
-  };
   return (
-    <span
-      title="Backend-computed from raw dense cosine and rank agreement. Not a probability, not a similarity percentage, and not produced by a language model."
-      className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider ring-1 ${styles[strength]}`}
-    >
-      {strength}
-      {typeof cosine === "number" && (
-        <span className="font-mono text-[11px] font-normal opacity-70">cos {cosine.toFixed(3)}</span>
-      )}
-      {calibrated === false && (
-        <span className="text-[10px] font-normal opacity-60">uncalibrated</span>
-      )}
-    </span>
+    <div className={`rounded-xl border px-4 py-3.5 ${TONE[tone]}`}>
+      <p className="text-[14px] font-semibold">{title}</p>
+      {children && <div className="mt-1 text-[13.5px] leading-relaxed opacity-90">{children}</div>}
+    </div>
   );
 }
 
-export function ModeBadge({ mode }: { mode: string }) {
-  const label: Record<string, string> = {
-    deterministic: "No model was called. Retrieved resolution notes rendered with citations.",
-    llm: "A language model composed these steps from the retrieved evidence.",
-    evidence_only: "Retrieval worked, but no case carried a usable resolution note.",
-    disabled: "This capability is switched off by the manifest.",
-  };
+/** Everything precise, tucked away. Present on every screen, never in the way. */
+export function TechnicalDetails({
+  children,
+  summary = "Technical details",
+}: {
+  children: ReactNode;
+  summary?: string;
+}) {
   return (
-    <span
-      title={label[mode] ?? mode}
-      className="rounded-md bg-ink-700 px-2.5 py-1 font-mono text-[11px] text-slate-300 ring-1 ring-line"
-    >
-      mode: {mode}
-    </span>
+    <details className="group rounded-xl border border-rule bg-paper-sunk/60">
+      <summary className="flex items-center gap-2 px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-mute transition hover:text-ink-soft">
+        <svg
+          viewBox="0 0 12 12"
+          className="h-2.5 w-2.5 transition-transform group-open:rotate-90"
+          aria-hidden
+        >
+          <path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        </svg>
+        {summary}
+      </summary>
+      <div className="border-t border-rule px-4 py-3.5">{children}</div>
+    </details>
   );
 }
 
-/** Per-step citation chip. Clicking scrolls to the evidence it points at. */
-export function CitationChip({ id }: { id: string }) {
+export function Row({ k, v }: { k: string; v: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-6 border-b border-rule/70 py-1.5 last:border-0">
+      <span className="text-[12.5px] text-ink-mute">{k}</span>
+      <span className="text-right font-mono text-[12px] text-ink-soft">{v}</span>
+    </div>
+  );
+}
+
+export function TicketRef({ id }: { id: string }) {
   return (
     <a
-      href={`#evidence-${id}`}
-      className="rounded bg-sky-500/10 px-1.5 py-0.5 font-mono text-[11px] text-sky-300 ring-1 ring-sky-500/25 transition hover:bg-sky-500/20"
+      href={`#t-${id}`}
+      className="rounded-md bg-teal-light px-1.5 py-0.5 font-mono text-[11.5px] text-teal transition hover:bg-teal hover:text-paper"
     >
       {id}
     </a>
   );
 }
 
-export function Banner({
-  tone,
-  title,
-  children,
-}: {
-  tone: "warn" | "info" | "danger";
-  title: string;
-  children?: ReactNode;
-}) {
-  const styles = {
-    warn: "border-amber-500/30 bg-amber-500/[0.07] text-amber-200",
-    info: "border-sky-500/30 bg-sky-500/[0.07] text-sky-200",
-    danger: "border-rose-500/30 bg-rose-500/[0.07] text-rose-200",
-  }[tone];
+/** A disabled capability states why. Never an empty chart, never a zero. */
+export function Unavailable({ name, reason }: { name: string; reason: string | null }) {
   return (
-    <div className={`rounded-lg border px-4 py-3 text-sm ${styles}`}>
-      <p className="font-semibold">{title}</p>
-      {children && <div className="mt-1 text-[13px] opacity-90">{children}</div>}
-    </div>
-  );
-}
-
-/**
- * What a disabled capability renders. Never an empty chart, never a zero —
- * a zero implies a measurement that did not happen.
- */
-export function CapabilityDisabled({ name, reason }: { name: string; reason: string | null }) {
-  return (
-    <div className="rounded-xl border border-line bg-ink-800/60 px-6 py-10 text-center">
-      <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
-        {name} — disabled
+    <Panel className="px-8 py-14 text-center">
+      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-faint">
+        {name} — unavailable
       </p>
-      <p className="mx-auto mt-3 max-w-xl text-sm text-slate-300">
+      <p className="mx-auto mt-4 max-w-reading font-serif text-[19px] leading-relaxed text-ink-soft">
         {reason ?? "No reason was recorded."}
       </p>
-      <p className="mx-auto mt-4 max-w-xl text-xs leading-relaxed text-slate-500">
-        This capability is switched off because the dataset or configuration does not support it.
-        No placeholder result is shown in its place — a zero here would imply a measurement that
-        did not happen.
+      <p className="mx-auto mt-5 max-w-reading text-[13px] leading-relaxed text-ink-mute">
+        This is switched off because the data behind it does not support it. Nothing is shown in
+        its place — a blank chart or a zero would suggest a measurement that never happened.
       </p>
-    </div>
+    </Panel>
   );
 }
 
-export function Spinner({ label }: { label?: string }) {
+export function Loading({ label }: { label: string }) {
   return (
-    <div className="flex items-center gap-3 text-sm text-slate-400">
-      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-600 border-t-slate-300" />
-      {label ?? "Loading…"}
-    </div>
-  );
-}
-
-export function KeyValue({ k, v }: { k: string; v: ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-line/60 py-1.5 last:border-0">
-      <span className="text-xs text-slate-500">{k}</span>
-      <span className="text-right font-mono text-xs text-slate-300">{v}</span>
+    <div className="flex items-center gap-3 text-[14px] text-ink-mute">
+      <span className="relative flex h-2 w-2">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal opacity-60" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-teal" />
+      </span>
+      {label}
     </div>
   );
 }

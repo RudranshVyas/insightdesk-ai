@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/components/ui.tsx","./src/lib/api.ts","./src/lib/capabilities.tsx","./src/pages/capabilitiespage.tsx","./src/pages/supportbriefpage.tsx"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/ui.tsx","./src/lib/api.ts","./src/lib/capabilities.tsx","./src/lib/plain.ts","./src/pages/capabilitiespage.tsx","./src/pages/supportbriefpage.tsx"],"version":"5.9.3"}
