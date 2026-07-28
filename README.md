@@ -36,13 +36,17 @@ Built and tested. Honest about what is not.
 | 4 — Hybrid retrieval (dense + BM25 + RRF) | ✅ |
 | 5 — Retrieval evaluation + CI regression gate | ✅ |
 | 6 — Support Brief pipeline + verifier | ✅ |
-| 7 — Guardrail evaluation suite | ⬜ not built |
+| 7 — Guardrail evaluation suite | ✅ |
+| 12 — Docker + CI quality gates | ✅ |
+| 13 — AGENTS.md + PR checklist | ✅ |
 | 8 — Clustering | ⬜ not built |
 | 9 — Risk model | ⬜ not built |
 | 10 — OpenTelemetry observability | ⬜ not built |
 | 11 — LangGraph analyst agent | ⬜ not built |
 
-**302 tests passing.** No metric in this README is asserted without a test or an artifact behind it.
+**342 tests passing.** No metric in this README is asserted without a test or an artifact behind it. Every claim is registered in [`docs/claims.md`](docs/claims.md) with the artifact that proves it; everything the system cannot do is in [`docs/limitations.md`](docs/limitations.md).
+
+Running corpus: **25,036 English resolved cases** from a Kaggle support-ticket dataset.
 
 ---
 
@@ -84,6 +88,31 @@ hybrid               1.000   1.000   1.000    0.750    1.333
 `Hit@3 = 1.000` looks like a triumph. It is not. The proxy label is `issue_type`, which has only a handful of values, so a **random draw from the corpus scores 0.750**. Real lift is 1.33×. The harness reports the baseline and the lift alongside the raw number and labels the metric as saturating, because a metric that flatters the system is worse than no metric.
 
 That is why Tier 1 is labeled a *weak automatic diagnostic* and only the Tier 2 human-graded set may be quoted as retrieval quality. Until that set is graded, the manifest reads `evaluation_status: manual_set_not_yet_labeled` and the UI prints exactly that instead of a number.
+
+---
+
+## The guardrail suite found a real defect
+
+The Phase 6 guardrails were claims until Phase 7 measured them. 14 hand-authored cases — injection in the query, injection in the evidence, fabricated citations, PII on both sides, conflicting evidence, provider timeout, malformed JSON — run through the *real* pipeline with doubles only at retrieval and the provider.
+
+Two failed on the first run. Prompt injection was detected and warned about, but the brief came back with `manual_review_required: false`. The verifier computed that flag from its own warnings — citation drops, PII, overclaiming — while injection is detected upstream at intake and evidence curation, so it never reached the decision.
+
+Warning an analyst that the evidence may be compromised while telling them the brief needs no review is the worst of both. Injection found anywhere now escalates the whole brief.
+
+Current report (`artifacts/guardrails/evaluation.json`):
+
+```
+weak_retrieval_generation_violations  0      ← hard gate, fails CI
+citation_validity_rate                1.000
+step_citation_coverage                1.000
+abstention_accuracy                   1.000
+injection_resistance_rate             1.000
+deterministic_fallback_success        1.000
+pii_leakage_rate                      0.000
+tokens / cost                         not_applicable
+```
+
+Tokens and cost read `not_applicable`, not `0` — the provider is scripted, so a zero would imply a measurement that did not happen.
 
 ---
 
@@ -145,15 +174,22 @@ Artifacts are built by offline scripts only — never at API startup, never duri
 
 ```bash
 python -m pytest backend/tests -q
+python -m backend.scripts.eval_guardrails --check
 ```
 
 ---
 
-## The schema-adapter trap this caught
+## Traps this caught on real data
 
-The auto-suggested mapping for the dataset guessed `sla_plan: sla_breached`. That is an **outcome** column being mapped to a **plan tier** — it would have fed a post-outcome field straight into the creation-time feature list for the risk model, which is precisely the leakage the whole design exists to prevent.
+**A dataset that could not support retrieval.** The first candidate advertised 200,000 real support tickets. `triage_dataset.py` measured **10 distinct issue descriptions across 50,000 rows — ratio 0.0002**. The retrieval corpus would have been ten documents. Rejected, and the rejection is documented in [`docs/claims.md`](docs/claims.md). The shipped dataset scores 0.9958 on the same measure.
 
-Every correction made during mapping review is recorded in the mapping file with its reason. No dataset column name appears anywhere else in the codebase.
+**A mapping that would have leaked an outcome into the risk features.** The auto-suggested mapping guessed `sla_plan: sla_breached` — an *outcome* column mapped to a *plan tier*. Every correction is recorded in the mapping file with its reason. No dataset column name appears anywhere else in the codebase.
+
+**An O(n²) degeneration that only appears on templated data.** MinHash-LSH is near-linear while buckets stay small. When every row is a near-duplicate of every other, each query returns tens of thousands of candidates and the union pass never completes — measured at 2006 CPU-seconds with no result. Collapsing exact duplicates before MinHash: **1.22 seconds** at 200K rows.
+
+**A purity guard testing the wrong invariant.** It asked whether any resolution note's opening appeared anywhere across all documents, and fired on *"Could you please provide details about your…"* — a stock phrase appearing in one ticket's answer and a different ticket's question. Ordinary English. Rewritten to check per row, it then found the genuine defect: 11 rows whose source data had duplicated the answer into the customer-message field.
+
+**Half an export left on the floor.** The Kaggle download ships five CSVs. Profiling only the largest discarded 8,716 usable rows — the second file overlapped it by 38.5%, the third not at all. Merging raised the corpus 53% and moved a test query from `mixed` @ 0.626 to `strong` @ 0.696.
 
 ---
 
