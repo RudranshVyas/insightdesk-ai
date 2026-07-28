@@ -37,12 +37,18 @@
 dataset:
   name: multilingual-customer-support-tickets
   source_url: https://www.kaggle.com/datasets/tobiasbueck/multilingual-customer-support-tickets
-  source_file: aa_dataset-tickets-multi-lang-5-2-50-version.csv
+  source_file: tickets_merged.csv  # merge of the 3 answer-bearing CSVs in the export
   download_date: "2026-07-28"
   id_prefix: "TK"
+  # The Kaggle export ships five CSVs. Two carry no `answer` column and are
+  # unusable for resolution generation. The other three are NOT subsets of one
+  # another — the 20k file overlapped the largest by 38.5% on issue body and the
+  # 4k file not at all — so merging them recovered 53% more English rows than
+  # the largest single file (16,334 -> 25,052). See merge_ticket_csvs.py.
+  #
   # Verified with triage_dataset.py before ingest, not assumed:
-  #   body   28585 unique / 28587 rows (ratio 0.9999), mean 387 chars
-  #   answer 28580 unique / 28580 rows (ratio 1.0),    mean 387 chars
+  #   body   ratio 0.9958, mean 428 chars
+  #   answer 43992 unique / 44177 rows (ratio 0.9958), mean 428 chars
   # For contrast, the rejected Kaggle 200K set scored ratio 0.0002 on both.
   # Not independently confirmed, so the data card will record `unverified`
   # regardless of what is written here. Set it only if you have checked.
