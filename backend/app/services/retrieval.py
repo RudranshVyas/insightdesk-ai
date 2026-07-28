@@ -637,28 +637,91 @@ def build_corpus(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
 
     mask, info = source_case_mask(df)
     corpus = df[mask].copy()
+
+    # --- drop rows whose source data leaked the answer into the question -----
+    # Some exports carry rows where the agent's reply was duplicated into the
+    # customer-message field, so the "question" is written in agent voice and
+    # already contains the resolution. Indexing those would let retrieval match
+    # on outcome text a real incoming ticket cannot contain — the exact failure
+    # the purity guard exists to prevent. They are excluded and counted rather
+    # than silently indexed or quietly tolerated by a weaker guard.
+    if "resolution_notes" in corpus.columns:
+        body = corpus.get(
+            "issue_description", corpus.get("issue_text", pd.Series(dtype=str))
+        ).fillna("").astype(str)
+        notes = corpus["resolution_notes"].fillna("").astype(str)
+        leaked = pd.Series(
+            [
+                len(n.strip()) >= 60 and n.strip()[:60] in b
+                for b, n in zip(body, notes)
+            ],
+            index=corpus.index,
+        )
+        n_leaked = int(leaked.sum())
+        if n_leaked:
+            corpus = corpus[~leaked].copy()
+        info["leaked_resolution_rows_excluded"] = n_leaked
+        info["leaked_resolution_note"] = (
+            "Rows where the source data duplicated the resolution text into the "
+            "customer-message field. Indexing them would make retrieval match on "
+            "outcome text a new ticket cannot possess."
+        )
+        info["eligible_source_cases"] = int(len(corpus))
+
     corpus["retrieval_document"] = [
         build_retrieval_document(row) for row in corpus.to_dict("records")
     ]
     return corpus, info
 
 
-def assert_document_is_problem_side_only(documents: Sequence[str], corpus: pd.DataFrame) -> None:
-    """Guard rail with teeth: a resolution note leaking into a document would
-    make retrieval match on text the query cannot contain."""
-    notes = [
-        str(n)
-        for n in corpus.get("resolution_notes", pd.Series(dtype=str)).fillna("").tolist()
-        if len(str(n)) > 40
-    ]
-    sample_notes = notes[:200]
-    joined = "\n".join(documents[:2000])
-    for note in sample_notes:
-        if note[:40] in joined:
+def assert_document_is_problem_side_only(
+    documents: Sequence[str], corpus: pd.DataFrame, probe_chars: int = 60
+) -> None:
+    """Guard rail with teeth: a ticket's own resolution note must not appear in
+    its own retrieval document.
+
+    **The check is per row, and that is the whole point.** An earlier version
+    asked whether any note's opening appeared anywhere across all documents,
+    which fails on any real corpus: agents and customers write the same stock
+    phrases, so "Could you please provide details about your..." legitimately
+    appears in one ticket's answer and a different ticket's question. That is
+    ordinary English, not leakage.
+
+    Leakage is specifically ticket X's document carrying ticket X's answer —
+    that, and only that, lets retrieval match on text a new ticket cannot
+    possess. Comparing row-against-itself catches the real failure and stops
+    flagging vocabulary overlap between unrelated tickets.
+    """
+    if "resolution_notes" not in corpus.columns:
+        return
+
+    notes = corpus["resolution_notes"].fillna("").astype(str).tolist()
+    ticket_ids = corpus["ticket_id"].astype(str).tolist()
+
+    for doc, note, tid in zip(documents, notes, ticket_ids):
+        probe = note.strip()[:probe_chars]
+        if len(probe) < probe_chars:
+            continue  # too short to be a distinctive fingerprint
+        if probe in doc:
             raise ValueError(
-                "a resolution note appears inside a retrieval document; the index "
-                "must contain the problem side only"
+                f"ticket {tid}: its own resolution note appears inside its own "
+                f"retrieval document. The index must contain the problem side "
+                f"only — outcome text a new ticket cannot possess must never be "
+                f"matchable. Offending prefix: {probe!r}"
             )
+
+    # Structural check: the document builder must never read a banned field.
+    # Cheap, and it catches a whole class of mistake the per-row scan cannot —
+    # e.g. someone adding `escalated` to the template, where the value is short
+    # enough to slip under the probe length.
+    banned_in_template = [
+        f for f in BANNED_FROM_DOCUMENT if f"{f.replace('_', ' ').title()}:" in (documents[0] if documents else "")
+    ]
+    if banned_in_template:
+        raise ValueError(
+            f"the retrieval document template exposes banned outcome fields: "
+            f"{banned_in_template}"
+        )
 
 
 def data_hash_for(df: pd.DataFrame) -> str:

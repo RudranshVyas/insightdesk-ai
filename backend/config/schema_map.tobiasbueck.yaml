@@ -37,7 +37,13 @@
 dataset:
   name: multilingual-customer-support-tickets
   source_url: https://www.kaggle.com/datasets/tobiasbueck/multilingual-customer-support-tickets
+  source_file: aa_dataset-tickets-multi-lang-5-2-50-version.csv
   download_date: "2026-07-28"
+  id_prefix: "TK"
+  # Verified with triage_dataset.py before ingest, not assumed:
+  #   body   28585 unique / 28587 rows (ratio 0.9999), mean 387 chars
+  #   answer 28580 unique / 28580 rows (ratio 1.0),    mean 387 chars
+  # For contrast, the rejected Kaggle 200K set scored ratio 0.0002 on both.
   # Not independently confirmed, so the data card will record `unverified`
   # regardless of what is written here. Set it only if you have checked.
   license_status: unverified
