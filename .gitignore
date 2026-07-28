@@ -13,6 +13,9 @@ data/evaluation/*
 !data/evaluation/.gitkeep
 !data/evaluation/README.md
 !data/evaluation/*.template.jsonl
+# Guardrail cases are hand-authored and self-contained — no real ticket ids —
+# so unlike graded retrieval sets they belong in git.
+!data/evaluation/guardrail_cases.jsonl
 
 # Artifacts — indexes, models, embeddings, audits
 artifacts/*

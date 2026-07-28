@@ -91,6 +91,9 @@ jobs:
       - name: Gate — capability gating disables, never fakes a zero
         run: python -m pytest backend/tests/test_capabilities_v2.py -q
 
+      - name: Gate — guardrail evaluation suite (14 categories)
+        run: python -m backend.scripts.eval_guardrails --check
+
       - name: Gate — app boots and serves with LLM_PROVIDER=none
         env:
           LLM_PROVIDER: none

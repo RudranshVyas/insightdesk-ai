@@ -71,6 +71,11 @@ class PipelineState:
     provider_calls: int = 0
     prompt: Prompt | None = None
     provider_usage: dict[str, Any] = field(default_factory=dict)
+    # Set when instruction-like text is found in the query or in retrieved
+    # evidence. Detection happens at intake and curation, which are upstream of
+    # the verifier, so without carrying it forward the brief would be warned
+    # about but not escalated — the guardrail evaluation caught exactly that.
+    injection_flagged: bool = False
 
     def transition(self, new_state: str) -> None:
         self.state = new_state
@@ -132,6 +137,7 @@ def intake_and_redact(state: PipelineState, settings: Settings) -> None:
 
         scan = G.scan_injection(redacted)
         if scan.flagged:
+            state.injection_flagged = True
             ctx.warnings.append(
                 f"Query contains instruction-like text ({', '.join(scan.labels)}). "
                 f"It is treated as data describing a problem, never as instructions."
@@ -268,6 +274,7 @@ def curate_evidence(state: PipelineState, settings: Settings) -> None:
             )
         flagged = [t.ticket_id for t in chosen if t.injection_flags]
         if flagged:
+            state.injection_flagged = True
             ctx.warnings.append(
                 f"Evidence tickets {flagged} contain instruction-like text. They are "
                 f"fenced as untrusted data in the prompt."
@@ -425,7 +432,11 @@ def compose_brief(state: PipelineState, settings: Settings) -> SupportBrief:
         suggested_steps=v.steps if v else [],
         relevance_explanation=(v.relevance_explanation if v else None) or None,
         risk_signal=None,  # capability-gated; null rather than a fabricated zero
-        manual_review_required=v.manual_review_required if v else True,
+        # Injection detected anywhere upstream escalates the whole brief, not
+        # just the stage that found it. Warning an analyst while leaving the
+        # brief marked "no review needed" is the worst of both.
+        manual_review_required=(v.manual_review_required if v else True)
+        or state.injection_flagged,
         insufficient_evidence=v.insufficient_evidence if v else True,
         warnings=state.warnings,
         stage_trace=state.trace,
