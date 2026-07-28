@@ -59,3 +59,8 @@ frontend/.vite/
 Thumbs.db
 .idea/
 .vscode/
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
