@@ -1,0 +1,133 @@
+# Mapping for the Kaggle "Customer IT Support — Ticket Dataset" (tobiasbueck).
+#
+# PROVISIONAL. The column names below come from the dataset description, not
+# from the file itself. Confirm them before trusting this:
+#
+#   python -m backend.scripts.ingest_tickets \
+#       --csv data/raw/<file>.csv --suggest-mapping backend/config/_suggested.yaml
+#
+# That prints the real header and a per-column profile. Fix any mismatch here,
+# then ingest with --mapping pointing at THIS file.
+#
+# ---------------------------------------------------------------------------
+# Two documented approximations. Both are claims about the corpus, so both are
+# recorded here rather than applied silently.
+#
+# 1. resolution_notes <- `answer`
+#    `answer` is the FIRST agent response, which is not the same thing as a
+#    resolution note. Some first responses resolve the ticket; others are an
+#    acknowledgement. The boilerplate filter in canonical.py removes the most
+#    obviously empty ones, and the audit reports how many survive, but the
+#    approximation itself cannot be filtered away — it is disclosed instead.
+#
+# 2. language filter
+#    The corpus is DE/EN/ES/PT/FR. The embedding model is all-MiniLM-L6-v2,
+#    which is English-centric: mixing languages into one FAISS index degrades
+#    retrieval and makes the cosine gate thresholds meaningless, because those
+#    thresholds were set against English cosine distributions. Restricting to
+#    English is defensible; doing it without recording it is not.
+#
+#    To index every language instead, delete the filter AND switch
+#    EMBEDDING_MODEL to a multilingual checkpoint, e.g.
+#    sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2. Changing the
+#    model invalidates the gate thresholds and any recorded eval baseline —
+#    re-run Phase 5 and re-record the baseline if you do.
+# ---------------------------------------------------------------------------
+
+dataset:
+  name: multilingual-customer-support-tickets
+  source_url: https://www.kaggle.com/datasets/tobiasbueck/multilingual-customer-support-tickets
+  download_date: "2026-07-28"
+  # Not independently confirmed, so the data card will record `unverified`
+  # regardless of what is written here. Set it only if you have checked.
+  license_status: unverified
+
+filters:
+  - column: language
+    keep: ["en"]
+    reason: >-
+      all-MiniLM-L6-v2 is English-centric. Mixing languages into one index
+      degrades retrieval and invalidates the gate thresholds, which were
+      calibrated against English cosine distributions.
+
+columns:
+  # If --suggest-mapping shows an id column, name it here and DELETE the
+  # `ticket_id: row_index` derivation at the bottom of this file. Real ids beat
+  # synthesized ones because they survive a re-export.
+  ticket_id: null
+  created_at: null         # no genuine ticket-creation timestamp in this export
+  resolved_at: null
+  first_response_at: null
+  sla_deadline: null
+  customer_segment: null
+  product_area: queue      # the routing queue is the closest thing to a product area
+  issue_type: type
+  priority: priority
+  status: null             # no lifecycle status column
+  channel: null            # every row is email
+  platform: null
+  region: null
+  sla_plan: null
+  issue_subject: subject
+  issue_description: body
+  resolution_notes: answer # SEE APPROXIMATION 1 ABOVE
+  response_time_hours: null
+  resolution_time_hours: null
+  reopened: null
+  escalated: null
+  sla_breached: null
+  csat_score: null
+
+privacy:
+  # No customer identifier column in this export. If one appears, name it here
+  # and it will be hashed rather than stored.
+  customer_id_column: null
+
+normalization:
+  nulls: ["", "na", "n/a", "null", "none", "nan", "-", "--"]
+  timestamps:
+    format: null
+    forbidden_created_at_columns: []
+  status:
+    resolved: []
+    open: []
+    pending: []
+  booleans:
+    true_values: ["yes", "true", "1", "y"]
+    false_values: ["no", "false", "0", "n"]
+  csat:
+    scale_min: null
+    scale_max: null
+    zero_means_no_response: false
+  resolved_definition:
+    # No status column exists. The capability layer will fall back to accepting
+    # tickets that carry usable resolution notes, and will record that
+    # relaxation in the manifest under retrieval.relaxation.
+    statuses: []
+
+# No timestamps, so no duration is derived — deriving one from absent columns
+# would fabricate a metric.
+#
+# ticket_id IS derived, because this export has no id column. Positional ids are
+# stable only for the exact file recorded in the data card. Delete this line the
+# moment a real id column is available.
+derivations:
+  ticket_id: row_index
+
+# ---------------------------------------------------------------------------
+# Expected consequences, so nothing below is a surprise in the manifest:
+#
+#   analytics.timeseries        DISABLED — no created_at
+#   analytics.resolution_time   DISABLED — no durations
+#   analytics.csat              DISABLED — no rating column
+#   analytics.escalation_rate   DISABLED — no outcome column
+#   risk                        DISABLED — no T0-valid target exists here
+#   retrieval                   ENABLED if `body` and `answer` clear the
+#                               uniqueness bar; check with triage_dataset.py first
+#   resolution_generation       ENABLED if enough answers survive the
+#                               boilerplate filter
+#
+# That is a lot of disabled capabilities. That is the correct outcome for this
+# data and it is the point of the manifest — six honest disables with reasons
+# beat one fabricated dashboard.
+# ---------------------------------------------------------------------------

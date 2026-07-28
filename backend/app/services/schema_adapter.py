@@ -246,6 +246,63 @@ def parse_timestamps(
 # --- main entry point -------------------------------------------------------
 
 
+def _apply_row_filters(
+    df: pd.DataFrame, cfg: dict[str, Any], report: AdapterReport
+) -> pd.DataFrame:
+    """Restrict rows per the mapping's ``filters:`` block, recording every drop.
+
+    Shape:
+
+        filters:
+          - column: language
+            keep: ["en"]
+            reason: "all-MiniLM-L6-v2 is English-centric; mixing languages into
+                     one index degrades retrieval and invalidates the gate
+                     thresholds."
+
+    Matching is case-insensitive on the stringified value. A filter naming a
+    column that does not exist is a hard error, not a silent no-op — a typo that
+    quietly disables a filter would misrepresent the corpus.
+    """
+    filters = cfg.get("filters") or []
+    if not filters:
+        return df
+
+    applied: list[dict[str, Any]] = []
+    for spec in filters:
+        column = spec.get("column")
+        keep = spec.get("keep")
+        if not column or not keep:
+            raise ValueError(f"filter needs both 'column' and 'keep': {spec!r}")
+        if column not in df.columns:
+            raise ValueError(
+                f"filter references column {column!r}, which is not in the CSV. "
+                f"Available: {sorted(map(str, df.columns))[:20]}"
+            )
+
+        wanted = {str(v).strip().lower() for v in keep}
+        before = len(df)
+        df = df[df[column].astype(str).str.strip().str.lower().isin(wanted)]
+        applied.append(
+            {
+                "column": str(column),
+                "kept_values": sorted(wanted),
+                "rows_before": before,
+                "rows_after": len(df),
+                "rows_dropped": before - len(df),
+                "reason": spec.get("reason") or "no reason recorded",
+            }
+        )
+
+    report.normalizations["row_filters"] = applied
+    for a in applied:
+        report.rejections.append(
+            f"row filter on {a['column']}: kept {a['kept_values']}, dropped "
+            f"{a['rows_dropped']} of {a['rows_before']} rows. {a['reason']}"
+        )
+    return df
+
+
 def apply_mapping(
     df: pd.DataFrame, cfg: dict[str, Any]
 ) -> tuple[pd.DataFrame, AdapterReport]:
@@ -255,6 +312,14 @@ def apply_mapping(
     report.source_columns = [str(c) for c in df.columns]
     report.source_dtypes = {str(c): str(t) for c, t in df.dtypes.items()}
     report.rows_in = len(df)
+
+    # --- declarative row filters --------------------------------------------
+    # A corpus restriction is a claim about what the system was built on, so it
+    # belongs in the mapping file and the audit rather than in a preprocessing
+    # step somebody ran once and forgot. The motivating case: a multilingual
+    # ticket export indexed with an English-centric embedding model. Restricting
+    # to one language is defensible; doing it silently is not.
+    df = _apply_row_filters(df, cfg, report)
 
     columns: dict[str, str | None] = {
         k: v for k, v in (cfg.get("columns") or {}).items() if v
@@ -300,7 +365,30 @@ def apply_mapping(
 
     # --- ticket_id ----------------------------------------------------------
     if "ticket_id" not in out.columns:
-        raise ValueError("mapping must provide ticket_id")
+        # Some exports carry no id column at all. Refusing outright would be
+        # unhelpful; synthesizing one silently would be worse, because a
+        # positional id is only stable for one exact file. So it is synthesized,
+        # recorded as a derivation, and tied to the file whose sha256 the data
+        # card records. Re-export the source and the ids change.
+        synth = (cfg.get("derivations") or {}).get("ticket_id")
+        if synth != "row_index":
+            raise ValueError(
+                "mapping must provide ticket_id. If the CSV genuinely has no id "
+                "column, set `derivations: {ticket_id: row_index}` to synthesize "
+                "one from row position — positional ids are stable only for this "
+                "exact file, and that caveat is recorded in the audit."
+            )
+        prefix = str((cfg.get("dataset") or {}).get("id_prefix") or "T")
+        out["ticket_id"] = [f"{prefix}{i:07d}" for i in range(len(out))]
+        report.derived["ticket_id"] = (
+            f"synthesized from row position as {prefix}<7-digit index>; the CSV "
+            f"had no id column. Stable only for the exact file recorded in the "
+            f"data card's raw_file_sha256."
+        )
+        report.rejections.append(
+            "no ticket_id column in the source; ids were synthesized from row "
+            "position. They will not match any id in the originating system."
+        )
     out["ticket_id"] = out["ticket_id"].map(
         lambda v: None if v is None else str(v).strip()
     )
