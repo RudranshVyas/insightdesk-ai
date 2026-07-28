@@ -20,6 +20,7 @@ import pandas as pd
 from backend.app.core import canonical as C
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.versions import MANIFEST_VERSION
+from backend.app.services import resolution_quality as RQ
 
 # Providers this build knows how to talk to. Anything else is treated as
 # "none" rather than assumed to work.
@@ -36,6 +37,12 @@ class Thresholds:
 
     retrieval_min_source_cases: int = 50
     generation_min_source_cases: int = 50
+    # A column named `resolution_notes` is a promise the data may not keep. Many
+    # exports put the first agent reply there, and a first reply usually asks for
+    # information rather than recording a fix. Below this measured rate the
+    # column is correspondence, and presenting it as "what resolved the ticket"
+    # would be a claim the data does not support.
+    generation_min_action_rate: float = 0.05
     clustering_min_texts: int = 200
     clustering_min_normalized_unique_ratio: float = 0.05
     risk_min_rows: int = 500
@@ -422,15 +429,36 @@ def build_capabilities(
     # --- resolution generation -----------------------------------------------
     provider = describe_llm_provider(settings)
 
+    # Measure what the "resolution notes" column actually contains before
+    # claiming anything about it.
+    quality = RQ.assess(df.get("resolution_notes", pd.Series(dtype=str)))
+
     if not retrieval["enabled"]:
         generation = _disabled(
-            f"retrieval is disabled: {retrieval['reason']}", available_modes=[]
+            f"retrieval is disabled: {retrieval['reason']}",
+            available_modes=[],
+            resolution_note_quality=quality,
         )
     elif corpus_info["usable_resolution_notes"] < th.generation_min_source_cases:
         generation = _disabled(
             f"only {corpus_info['usable_resolution_notes']} tickets carry non-boilerplate "
             f"resolution notes (minimum {th.generation_min_source_cases})",
             available_modes=["evidence_only"],
+            resolution_note_quality=quality,
+        )
+    elif (
+        quality["action_rate"] is not None
+        and quality["action_rate"] < th.generation_min_action_rate
+    ):
+        # The notes exist and are non-boilerplate, but they are correspondence
+        # rather than resolutions. Retrieval still works; claiming to show "what
+        # resolved it" does not.
+        generation = _disabled(
+            quality["note"]
+            + f" Minimum action rate for this capability is "
+            f"{th.generation_min_action_rate:.0%}.",
+            available_modes=["evidence_only"],
+            resolution_note_quality=quality,
         )
     else:
         # `deterministic` is always available — it needs no key. `llm` appears
@@ -444,6 +472,7 @@ def build_capabilities(
             resolved_status_used=corpus_info["resolved_status_used"],
             relaxation=corpus_info["relaxation"],
             available_modes=modes,
+            resolution_note_quality=quality,
             note=(
                 "Generation is additionally gated per request on retrieval strength. "
                 "Weak retrieval never reaches a generator."

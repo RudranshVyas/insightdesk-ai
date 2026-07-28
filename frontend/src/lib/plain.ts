@@ -40,7 +40,7 @@ export const MODE: Record<Mode, { label: string; blurb: string }> = {
   deterministic: {
     label: "From past tickets",
     blurb:
-      "These are the resolutions recorded on the matching tickets, shown as written. No AI wrote them.",
+      "Support's recorded reply on each matching ticket, shown as written. No AI wrote them.",
   },
   llm: {
     label: "AI summary",
@@ -48,9 +48,9 @@ export const MODE: Record<Mode, { label: string; blurb: string }> = {
       "An AI wrote these steps from the matching tickets. Every step cites the ticket it came from.",
   },
   evidence_only: {
-    label: "Cases only",
+    label: "Similar tickets only",
     blurb:
-      "Similar tickets were found, but none recorded what was done to resolve them.",
+      "These tickets match, but the data records only how support replied — not what finally fixed the problem.",
   },
   disabled: { label: "Unavailable", blurb: "This feature is switched off." },
 };

@@ -61,18 +61,18 @@ export default function SupportBriefPage() {
     }
   }
 
-  if (!enabled) return <Unavailable name="Resolution finder" reason={reason} />;
+  if (!enabled) return <Unavailable name="Ticket search" reason={reason} />;
 
   return (
     <div className="space-y-8">
       <section className="animate-rise">
         <h1 className="font-serif text-[34px] leading-[1.15] tracking-[-0.015em] text-ink sm:text-[42px]">
-          What did we do
-          <span className="text-teal"> last time</span>?
+          How did we handle
+          <span className="text-teal"> this before</span>?
         </h1>
         <p className="mt-3 max-w-reading text-[15.5px] leading-relaxed text-ink-soft">
-          Describe the customer's problem in your own words. You'll get the tickets that match and
-          what was actually done to resolve them.
+          Describe the customer's problem in your own words. You'll get the past tickets that match
+          and how support replied to each one.
         </p>
 
         <form onSubmit={submit} className="mt-6">
@@ -93,7 +93,7 @@ export default function SupportBriefPage() {
                 disabled={busy || !text.trim()}
                 className="rounded-xl bg-teal px-5 py-2.5 text-[14px] font-medium text-paper transition hover:bg-teal-deep disabled:cursor-not-allowed disabled:opacity-30"
               >
-                {busy ? "Searching…" : "Find resolutions"}
+                {busy ? "Searching…" : "Find similar tickets"}
               </button>
               <span className="text-[12.5px] text-ink-faint">
                 {busy ? "First search loads the search model — about 20 seconds." : "⌘ + Enter"}
@@ -119,7 +119,7 @@ export default function SupportBriefPage() {
 
       {busy && (
         <Panel className="px-5 py-4">
-          <Loading label="Searching 25,000 resolved tickets…" />
+          <Loading label="Searching past tickets…" />
         </Panel>
       )}
 
@@ -160,6 +160,13 @@ function Result({ brief }: { brief: SupportBrief }) {
           {s.blurb}
         </p>
       </div>
+
+      {brief.mode === "evidence_only" && (
+        <Notice tone="caution" title="These are replies, not fixes">
+          This dataset records how support first replied to each ticket. It does not record what
+          finally resolved them, so nothing here should be read as a solution.
+        </Notice>
+      )}
 
       {brief.manual_review_required && (
         <Notice tone="caution" title="Check this yourself before acting">
@@ -344,13 +351,13 @@ function CaseCard({
 
         <div className="px-5 py-4">
           <p className="mb-1.5 font-mono text-[10.5px] uppercase tracking-[0.12em] text-teal-mid">
-            What resolved it
+            How support replied
           </p>
           {resolution ? (
             <p className="font-serif text-[15px] leading-[1.65] text-ink">{resolution}</p>
           ) : (
             <p className="text-[14px] italic text-ink-faint">
-              This ticket has no record of what was done.
+              This ticket has no recorded reply.
             </p>
           )}
 
