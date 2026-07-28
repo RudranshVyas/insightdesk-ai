@@ -1,0 +1,23 @@
+# Never ship the dataset, the index, or a secret inside an image.
+data/
+artifacts/
+.env
+.env.*
+
+# Build noise
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+node_modules/
+frontend/dist/
+
+.git/
+.github/
+docs/
+*.md
+!README.md
